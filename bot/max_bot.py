@@ -669,7 +669,7 @@ def handle_callback(upd):
             send(chat_id=chat_id, user_id=user_id,
                  text=("Завести сотрудника: пришлите одной строкой\n"
                        "<user_id> <платформа> <ГГГГ-ММ-ДД> <Имя>\n"
-                       "например: 123456789 2026-11-10 Иван Петров\n"
+                       "например: 123456789 GrPP 2026-11-10 Иван Петров\n"
                        "Платформа: GrPP, Luzhniki или GTP."),
                  buttons=[[btn("Ввести сейчас", "nav:team_hire")], BACK])
         elif payload == "nav:team_hire" and hr_ok:
