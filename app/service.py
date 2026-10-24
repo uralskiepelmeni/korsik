@@ -206,6 +206,10 @@ def load_state():
     em = em.to(device).eval()
     # dtype верификатора: на GPU bf16, на CPU fp32 — но при нехватке памяти
     # можно задать KORSIK_VERIFIER_DTYPE=bfloat16 (модель займёт вдвое меньше)
+    try:
+        import accelerate  # noqa: F401  — нужен коду d3-nano (передаёт device_map внутри)
+    except ImportError:
+        raise RuntimeError("не установлен accelerate — выполните: pip install -r requirements.txt")
     vd = os.environ.get("KORSIK_VERIFIER_DTYPE") or ("bfloat16" if device == "cuda" else "float32")
     vdtype = {"bfloat16": torch.bfloat16, "float16": torch.float16, "float32": torch.float32}[vd]
     print(f"верификатор: {verifier}, dtype={vd}, устройство={device}", flush=True)
