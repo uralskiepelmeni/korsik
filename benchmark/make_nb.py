@@ -115,7 +115,8 @@ del em, etok
 free()
 
 from transformers import AutoModel as AM
-d3 = AM.from_pretrained(VERIFIER, trust_remote_code=True, dtype=DTYPE).to(DEVICE).eval()
+# d3 нельзя грузить в fp16/fp32: точность зафиксирована чекпойнтом (bf16), передаём None
+d3 = AM.from_pretrained(VERIFIER, trust_remote_code=True).to(DEVICE).eval()
 
 def d3_score(question, fragment):
     text = "Вопрос сотрудника: " + question + "  Фрагмент документа: " + fragment[:1800]
@@ -124,28 +125,36 @@ def d3_score(question, fragment):
                                         "instructions": "Этот фрагмент содержит ответ на вопрос сотрудника"}})
     return float(r["answers"]["ok"]["noul"])
 
-for _ in range(WARMUP):
-    d3_score(QUESTION, kb[0]["text"])
+# T4 (Turing) не поддерживает bf16 — проверяем сразу, чтобы ноутбук не падал
+VERIFIER_OK = True
+try:
+    for _ in range(WARMUP):
+        d3_score(QUESTION, kb[0]["text"])
+except Exception as e:
+    VERIFIER_OK = False
+    print("d3 на этой видеокарте не запустилась:", type(e).__name__, "|", str(e)[:200])
+    print("нужна карта с bf16: L4, A100 или A10G. На T4 наш замер снимается.")
 
-# 5.1 одна проверка «вопрос + фрагмент»
 one = []
-for _ in range(RUNS):
-    i = int(np.random.randint(0, len(kb)))
-    t0 = time.perf_counter()
-    d3_score(QUESTION, kb[i]["text"])
-    one.append((time.perf_counter() - t0) * 1000)
-
-# 5.2 восемь проверок — как в рабочем пайплайне
 eight = []
-for _ in range(RUNS):
-    t0 = time.perf_counter()
-    for i in np.random.randint(0, len(kb), 8):
-        d3_score(QUESTION, kb[int(i)]["text"])
-    eight.append((time.perf_counter() - t0) * 1000)
+if VERIFIER_OK:
+    for _ in range(RUNS):
+        i = int(np.random.randint(0, len(kb)))
+        t0 = time.perf_counter()
+        d3_score(QUESTION, kb[i]["text"])
+        one.append((time.perf_counter() - t0) * 1000)
 
-VERIFIER_ONE = stats(one)
-VERIFIER_EIGHT = stats(eight)
-print("одна проверка:", human(VERIFIER_ONE["median"]), "| восемь:", human(VERIFIER_EIGHT["median"]))
+    for _ in range(RUNS):
+        t0 = time.perf_counter()
+        for i in np.random.randint(0, len(kb), 8):
+            d3_score(QUESTION, kb[int(i)]["text"])
+        eight.append((time.perf_counter() - t0) * 1000)
+
+    VERIFIER_ONE = stats(one)
+    VERIFIER_EIGHT = stats(eight)
+    print("одна проверка:", human(VERIFIER_ONE["median"]), "| восемь:", human(VERIFIER_EIGHT["median"]))
+else:
+    VERIFIER_ONE = VERIFIER_EIGHT = None
 
 del d3
 free()''')
@@ -211,10 +220,20 @@ rows = [
 print(f"{'схема':32}{'медиана':>10}{'p90':>10}{'мин':>9}{'макс':>9}")
 print("-" * 70)
 for name, s in rows:
+    if s is None:
+        print(f"{name:32}{'н/д на T4':>10}")
+        continue
     print(f"{name:32}{human(s['median']):>10}{human(s['p90']):>10}{human(s['min']):>9}{human(s['max']):>9}")
 
+missing = [n for n, s in rows[:2] if s is None]
+if missing:
+    print()
+    print("Внимание: d3-nano работает в bf16, а T4 (Turing) bf16 не поддерживает.")
+    print("Наш замер на этой карте снят. Для честного сравнения нужна L4, A100 или A10G")
+    print("(в Colab — Pro), либо используйте заводские цифры с A10G: 0.42 с на вопрос.")
+
 for name, s in rows:
-    if "tokens_per_s" in s:
+    if s and "tokens_per_s" in s:
         print(name + ":", round(s["tokens_per_s"], 1), "токенов/с")
 
 import csv
@@ -222,6 +241,9 @@ with open("latency_t4.csv", "w", newline="", encoding="utf-8") as f:
     w = csv.writer(f)
     w.writerow(["схема", "медиана_мс", "p90_мс", "мин_мс", "макс_мс", "токенов_в_с"])
     for name, s in rows:
+        if s is None:
+            w.writerow([name, "", "", "", "", ""])
+            continue
         w.writerow([name, round(s["median"]), round(s["p90"]), round(s["min"]), round(s["max"]),
                     round(s.get("tokens_per_s", 0), 1)])
 
