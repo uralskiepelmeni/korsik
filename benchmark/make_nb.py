@@ -127,13 +127,27 @@ def d3_score(question, fragment):
 
 # T4 (Turing) не поддерживает bf16 — проверяем сразу, чтобы ноутбук не падал
 VERIFIER_OK = True
+VERIFIER_MODE = "bf16 (нативная точность)"
 try:
     for _ in range(WARMUP):
         d3_score(QUESTION, kb[0]["text"])
 except Exception as e:
-    VERIFIER_OK = False
-    print("d3 на этой видеокарте не запустилась:", type(e).__name__, "|", str(e)[:200])
-    print("нужна карта с bf16: L4, A100 или A10G. На T4 наш замер снимается.")
+    print("native bf16 не пошла на этой карте:", type(e).__name__, "|", str(e)[:160])
+    print("пробуем fp32 — T4 его умеет, числа будут честные, но медленнее нативной точности")
+    del d3
+    free()
+    d3 = AM.from_pretrained(VERIFIER, trust_remote_code=True).to(DEVICE).eval().float()
+    VERIFIER_MODE = "fp32 (T4 не умеет bf16)"
+    try:
+        for _ in range(WARMUP):
+            d3_score(QUESTION, kb[0]["text"])
+    except Exception as e2:
+        VERIFIER_OK = False
+        print("d3 не запустилась и в fp32:", type(e2).__name__, "|", str(e2)[:160])
+        print("нужна карта с bf16: L4, A100 или A10G.")
+
+if VERIFIER_OK:
+    print("наш замер идёт в режиме:", VERIFIER_MODE)
 
 one = []
 eight = []
@@ -228,9 +242,16 @@ for name, s in rows:
 missing = [n for n, s in rows[:2] if s is None]
 if missing:
     print()
-    print("Внимание: d3-nano работает в bf16, а T4 (Turing) bf16 не поддерживает.")
-    print("Наш замер на этой карте снят. Для честного сравнения нужна L4, A100 или A10G")
-    print("(в Colab — Pro), либо используйте заводские цифры с A10G: 0.42 с на вопрос.")
+    print("Наш верификатор не запустился на этой карте: d3-nano требует bf16,")
+    print("а T4 (Turing) его не поддерживает даже в fp32-режиме.")
+    print("Для честного сравнения нужна L4, A100 или A10G (в Colab — Pro),")
+    print("либо используйте заводские цифры с A10G: 0.42 с на вопрос.")
+
+if VERIFIER_OK and VERIFIER_MODE.startswith("fp32"):
+    print()
+    print("Внимание: наш верификатор замерен в fp32, потому что T4 не умеет bf16.")
+    print("На A10G в нативной точности он в 1.5–2 раза быстрее этих чисел.")
+    print("Qwen замерен в fp16 — это его родная точность на T4.")
 
 for name, s in rows:
     if s and "tokens_per_s" in s:
