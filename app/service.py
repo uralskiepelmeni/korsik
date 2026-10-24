@@ -202,14 +202,14 @@ def load_state():
     verifier = os.environ.get("KORSIK_VERIFIER", "vllm-sr/d3-nano")
     device = os.environ.get("KORSIK_DEVICE") or ("cuda" if torch.cuda.is_available() else "cpu")
     etok = AutoTokenizer.from_pretrained(emb_model)
-    em = AutoModel.from_pretrained(emb_model, torch_dtype=torch.float16 if device == "cuda" else torch.float32)
+    em = AutoModel.from_pretrained(emb_model, dtype=torch.float16 if device == "cuda" else torch.float32)
     em = em.to(device).eval()
     # dtype верификатора: на GPU bf16, на CPU fp32 — но при нехватке памяти
     # можно задать KORSIK_VERIFIER_DTYPE=bfloat16 (модель займёт вдвое меньше)
     vd = os.environ.get("KORSIK_VERIFIER_DTYPE") or ("bfloat16" if device == "cuda" else "float32")
     vdtype = {"bfloat16": torch.bfloat16, "float16": torch.float16, "float32": torch.float32}[vd]
     print(f"верификатор: {verifier}, dtype={vd}, устройство={device}", flush=True)
-    d3 = AutoModel.from_pretrained(verifier, trust_remote_code=True, torch_dtype=vdtype)
+    d3 = AutoModel.from_pretrained(verifier, trust_remote_code=True, dtype=vdtype)
     d3 = d3.to(device).eval()
     STATE.update({"kb": kb, "emb": emb, "etok": etok, "em": em, "d3": d3,
                   "torch": torch, "np": np, "device": device, "ready": True})

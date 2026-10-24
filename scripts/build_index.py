@@ -31,7 +31,7 @@ def main():
     print(f"чанков: {len(kb)} · модель: {model_id} · устройство: {device}")
 
     tok = AutoTokenizer.from_pretrained(model_id)
-    model = AutoModel.from_pretrained(model_id, torch_dtype=torch.float16 if device == "cuda" else torch.float32)
+    model = AutoModel.from_pretrained(model_id, dtype=torch.float16 if device == "cuda" else torch.float32)
     model = model.to(device).eval()
 
     texts = [f'{c["title"]} · {c["clause"]}. {c["text"]}' for c in kb]
