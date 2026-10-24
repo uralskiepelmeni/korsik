@@ -1,0 +1,15 @@
+transformers==5.17.0
+torch>=2.4
+accelerate
+safetensors
+numpy
+huggingface_hub
+fastapi[standard]
+uvicorn
+pypdf
+python-docx
+python-pptx
+pytesseract
+pdf2image
+pillow
+requests

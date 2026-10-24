@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+data/*.npy
+data/index.json
+data/korsik.db
+data/bot.log
+data/.max_marker
+data/.bot.lock
+data/employees.json
